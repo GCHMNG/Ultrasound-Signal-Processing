@@ -168,3 +168,184 @@ def Plot_FFT_Signal(signal,thresholds):
     plt.xlabel("Frequency - MegaHertz (MHz)")
     plt.legend()
     plt.show()
+
+    
+#---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
+#---------------------------------------------------------------------- The following functions find local max -----------------------------------------------------------------------#
+    
+#---------------------------------- we calculate the location of the spikes/pikes
+def Spikes_Location(data,threshold_value,range_value): 
+    #start = timeit.default_timer() 
+    potential_spikes_location = []         # We keep the locations where we have high value from the threshold_value, in other words our potential local extremes.
+    for i in range(0,len(data)):          
+        if data[i]>=threshold_value:
+            potential_spikes_location.append(i)
+    #stop = timeit.default_timer()
+    #print('Time: %.3f' % (stop - start),'for potential_spikes_location') 
+    
+    #start = timeit.default_timer()
+    spikes_location = []    
+    while (len(potential_spikes_location)>0):
+        potential_max_spikes_location = 0
+        potential_max_value_spikes_location = 0
+        for location in potential_spikes_location:
+            if (data[location]>potential_max_value_spikes_location):
+                potential_max_spikes_location = location
+                potential_max_value_spikes_location = data[location]
+        
+        flag = True
+        for max_location in spikes_location:
+            if(abs(max_location-potential_max_spikes_location) <= 2*range_value):  # Range of data we want to find the local max is 2 because is left and right
+                flag = False
+                break
+        if flag:
+            spikes_location.append(potential_max_spikes_location)
+        potential_spikes_location.remove(potential_max_spikes_location)    
+    #stop = timeit.default_timer()
+    #print('Time: %.3f' % (stop - start),'for spikes_location')   
+    return (spikes_location)
+
+#---------------------------- This functions finds spikes and amplitudes
+def Spikes_Location_and_Amplitude(signal,threshold_activity,range_removal):
+    spikes_list_location = Spikes_Location(signal,threshold_activity,range_removal)
+    spikes_list_location = sorted(spikes_list_location) #order of spikes in time
+    spikes_list_amplitude = []  
+    for j in spikes_list_location:   
+        spikes_list_amplitude.append(signal[j])  
+    spikes_list_amplitude = numpy.array(spikes_list_amplitude)
+    return(spikes_list_location,spikes_list_amplitude)
+
+#---------------------------- This function we plot the time signal with the spikes
+def Plot_Time_Signal_with_Spikes(signal,spikes_list_location,spikes_list_amplitude):
+    sample_Rate = 100000000  # Hertz <-- (100MHz)
+    period = 1/sample_Rate # in seconds
+    period = period * 1000000 # in microseconds (μs)
+    time_axis = []
+    for step in range (0,len(signal)):
+        time_axis.append(step*period) 
+    spikes_list_location_in_time = []
+    for i in range (0,len(spikes_list_location)):
+        spikes_list_location_in_time.append(spikes_list_location[i]*period)    
+    plt.figure(figsize=(30,7))
+    plt.rc('font',size=18)
+    plt.rc('axes',titlesize=18)
+    plt.rc('axes',labelsize=18)
+    plt.rc('legend',fontsize=18)
+    plt.rc('figure',titlesize=18)
+    plt.plot(time_axis,signal, alpha=0.8, color='blue',label="Time data")
+    plt.plot(spikes_list_location_in_time,spikes_list_amplitude,'o',alpha=0.8, color='red', label="Picks - Windows with Emission Activity")
+    plt.legend()
+    plt.grid()
+    plt.title("Time Domain")
+    plt.ylabel("Voltage - milliVolt (mV)")
+    plt.xlabel("Time - microseconds (μs)")
+    plt.legend()
+    plt.show()
+    
+#---------------------------- This function we create and plot a window of spike in Time in FFT and wavelet
+def Plot_Frame_Time_FFT_CTW (spikes_list_location,signal,frame_size,widths,bandwidth,center_frequency):
+    for i in range (1,len(spikes_list_location)):  
+        data_frame = signal[(spikes_list_location[i]):(spikes_list_location[i]+frame_size)] 
+        sample_Rate = 100000000  # in Hertz <-- (100MHz)
+        period = 1/sample_Rate # in seconds
+        period = period * 1000000 # in microseconds (μs)
+        sample_Rate = sample_Rate / 1000000 # in MegaHz
+        #----------------------------------------------------------------- Plots
+        plt.figure(1, figsize=(34,10))
+        plt.rc('font',size=18)
+        plt.rc('axes',titlesize=18)
+        plt.rc('axes',labelsize=18)
+        plt.rc('legend',fontsize=18)
+        plt.rc('figure',titlesize=18)
+        plt.clf()
+        plt.subplot(231) #---------------------------------- Signal in Time
+        time_axis = []
+        for step in range (0,len(data_frame)):
+            time_axis.append(step*period) 
+        plt.plot(time_axis,data_frame, alpha=0.8, color='blue',label="Time data")
+        plt.legend()
+        plt.grid()
+        plt.title("Frame - Time Domain")
+        plt.ylabel("Voltage - milliVolt (mV)")
+        plt.xlabel("Time - microseconds (μs)")
+        plt.legend()
+        plt.show
+        plt.subplot(232) #---------------------------------- FFT Signal
+        n = len(data_frame) # Number of samples 
+        frequencies = fftfreq(n, 1/sample_Rate)
+        spectrum = numpy.fft.fft(data_frame) 
+        plt.plot(frequencies[1:n//2],numpy.abs(spectrum[1:n//2]), alpha=0.8, color='blue',label="Domain data")
+        plt.legend()
+        plt.grid()
+        plt.title("Frame - Frequency Domain")
+        plt.ylabel("Amplitude")
+        plt.xlabel("Frequency - MegaHertz (MHz)")
+        plt.legend()
+        plt.show
+        ax = plt.subplot(233)
+        #---------------------------------- Wavelet Transform
+        cwtmatr, freqs = pywt.cwt(data=data_frame, scales=widths, wavelet='cmor'+str(bandwidth)+'-'+str(center_frequency), sampling_period=1/sample_Rate, method='fft') #'mexh' 'morl' 
+        cwt_values = numpy.abs(cwtmatr)
+        ax = plt.gca()
+        plt.title('Frame - Wavelet Domain'+numpy.str(i))
+        im = ax.imshow(cwt_values, cmap='seismic', aspect='auto')  # seismic gray
+        plt.colorbar(im)
+        x_values = numpy.arange(0,len(data_frame),250)
+        y_values = numpy.arange(0,len(freqs),15)
+        x_labels = []
+        for i in x_values:
+            x_labels.append(numpy.str("%.2f" % round(i*period, 4)))
+        y_labels = []
+        for i in y_values:
+            y_labels.append(numpy.str("%.2f" % round(freqs[i], 4)))
+        ax.set_xticks(x_values)
+        ax.set_xticklabels(x_labels)
+        ax.set_yticks(y_values)
+        ax.set_yticklabels( y_labels )
+        plt.ylabel("Frequency - MegaHertz (MHz)")
+        plt.xlabel("Time - microseconds (μs)")
+        plt.show()
+               
+#---------------------------- These functions we plot 1 CWT wavelet AND it is called only from the Plot_CTW_Rows_From_Saved_Wavelets. 
+def Sub_Plot_Wavelet (ax,i,wavelet,freqs):
+    plt.title(numpy.str(i))
+    sample_Rate = 100000000  # in Hertz <-- (100MHz)
+    period = 1/sample_Rate # in seconds
+    period = period * 1000000 # in microseconds (μs)
+    sample_Rate = sample_Rate / 1000000 # in MegaHz
+    #ax = plt.gca()
+    #im = ax.imshow(wavelet, cmap='seismic', aspect='auto')  # seismic gray
+    im = ax.imshow(wavelet, cmap='seismic', aspect='auto',vmin=0,vmax=1)  # seismic gray
+    plt.colorbar(im)
+    #---------------------------- Axis
+    x_values = numpy.arange(0,wavelet.shape[1],wavelet.shape[1]/4)
+    y_values = numpy.arange(0,len(freqs),15)
+    x_labels = []
+    for i in x_values:
+        x_labels.append(numpy.str("%.2f" % round(i*period, 4)))
+    y_labels = []
+    for i in y_values:
+        y_labels.append(numpy.str("%.2f" % round(freqs[i], 4)))
+    ax.set_xticks(x_values)
+    ax.set_xticklabels(x_labels)
+    ax.set_yticks(y_values)
+    ax.set_yticklabels( y_labels )
+    plt.ylabel("Frequency - MegaHertz (MHz)")
+    plt.xlabel("Time - microseconds (μs)")
+
+#---------------------------- This function we plot rows of saved wavelets 
+def Plot_Rows_of_Wavelets(wavelet_data,freqs,rows_num):
+    wavelets_num = len(wavelet_data)
+    i = 0
+    while (i < len(wavelet_data)):
+        plt.figure(1, figsize=(40,6))
+        plt.clf()
+        for j in range(0,rows_num):
+            if(i+j<wavelets_num):
+                ax = plt.subplot(201+rows_num*10+j) #---------------------------------- PLOT
+                Sub_Plot_Wavelet (ax,i+j,wavelet_data[i+j],freqs)
+                plt.show
+            else:
+                break
+        plt.show()
+        i +=rows_num
